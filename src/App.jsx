@@ -1,73 +1,130 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import Sidebar from './components/Sidebar'
+import Viewer from './components/Viewer'
+import Controls from './components/Controls'
+
 function App() {
+  const [preset, setPreset] = useState('orbit')
+  const [deviceColor, setDeviceColor] = useState('#111827')
+  const [media, setMedia] = useState(null)
+  const [progress, setProgress] = useState(0)
+  const [rendering, setRendering] = useState(false)
+  const [videoUrl, setVideoUrl] = useState(null)
+  const workerRef = useRef(null)
+
+  useEffect(() => {
+    // Lazy create worker
+    const code = document.querySelector('script[data-worker]')?.textContent
+    if (!workerRef.current && code) {
+      const blob = new Blob([code], { type: 'text/javascript' })
+      const url = URL.createObjectURL(blob)
+      workerRef.current = new Worker(url)
+      workerRef.current.onmessage = (e) => {
+        if (e.data?.type === 'progress') setProgress(e.data.progress)
+        if (e.data?.type === 'done') {
+          setRendering(false)
+          setVideoUrl(e.data.url)
+        }
+      }
+    }
+  }, [])
+
+  const handleRender = ({ resolution, duration }) => {
+    setRendering(true)
+    setProgress(0)
+    setVideoUrl(null)
+    workerRef.current?.postMessage({ cmd: 'render', payload: { resolution, duration, preset } })
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      {/* Subtle pattern overlay */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.05),transparent_50%)]"></div>
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+      <header className="h-14 border-b border-white/10 flex items-center px-4 gap-3">
+        <div className="w-2 h-2 rounded-full bg-emerald-500" />
+        <div className="font-semibold">PromoGen MVP</div>
+        <div className="opacity-60 text-sm">Client-side 3D preview + mock render</div>
+      </header>
+      <div className="flex-1 grid grid-rows-[1fr_auto] md:grid-rows-1 md:grid-cols-[auto_1fr_auto]">
+        <Sidebar selectedPreset={preset} onSelectPreset={setPreset} />
 
-      <div className="relative min-h-screen flex items-center justify-center p-8">
-        <div className="max-w-2xl w-full">
-          {/* Header with Flames icon */}
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center justify-center mb-6">
-              <img
-                src="/flame-icon.svg"
-                alt="Flames"
-                className="w-24 h-24 drop-shadow-[0_0_25px_rgba(59,130,246,0.5)]"
-              />
-            </div>
-
-            <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">
-              Flames Blue
-            </h1>
-
-            <p className="text-xl text-blue-200 mb-6">
-              Build applications through conversation
-            </p>
+        <main className="relative bg-slate-900/30">
+          <div className="absolute inset-0">
+            <Viewer media={media} preset={preset} deviceColor={deviceColor} />
           </div>
-
-          {/* Instructions */}
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-blue-500/20 rounded-2xl p-8 shadow-xl mb-6">
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                1
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Describe your idea</h3>
-                <p className="text-blue-200/80 text-sm">Use the chat panel on the left to tell the AI what you want to build</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                2
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Watch it build</h3>
-                <p className="text-blue-200/80 text-sm">Your app will appear in this preview as the AI generates the code</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                3
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Refine and iterate</h3>
-                <p className="text-blue-200/80 text-sm">Continue the conversation to add features and make changes</p>
+          <div className="absolute left-1/2 -translate-x-1/2 bottom-4 w-[min(640px,90%)]">
+            <div className="bg-slate-900/70 backdrop-blur border border-white/10 rounded-lg p-3">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${rendering ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500'}`} />
+                  {rendering ? 'Rendering…' : videoUrl ? 'Render complete' : 'Idle'}
+                </div>
+                <div className="flex-1 h-2 bg-slate-800 rounded overflow-hidden">
+                  <div className="h-full bg-blue-500 transition-all" style={{ width: `${Math.round(progress*100)}%` }} />
+                </div>
+                {videoUrl && (
+                  <a className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500" href={videoUrl} download>
+                    Download
+                  </a>
+                )}
               </div>
             </div>
           </div>
+        </main>
 
-          {/* Footer */}
-          <div className="text-center">
-            <p className="text-sm text-blue-300/60">
-              No coding required • Just describe what you want
-            </p>
-          </div>
-        </div>
+        <Controls
+          onMediaSelected={setMedia}
+          onRender={handleRender}
+          deviceColor={deviceColor}
+          setDeviceColor={setDeviceColor}
+          preset={preset}
+          setPreset={setPreset}
+        />
       </div>
+
+      {/* Inline worker source for simplicity in this environment */}
+      <script type="text/worker" data-worker>
+        {`
+          ${inlineWorker()}
+        `}
+      </script>
     </div>
   )
+}
+
+function inlineWorker() {
+  return `
+  self.onmessage = async (e) => {
+    const { cmd, payload } = e.data || {}
+    if (cmd === 'render') {
+      const total = (payload.duration || 3) * 30
+      for (let i = 0; i <= total; i++) {
+        await new Promise(r => setTimeout(r, 10))
+        self.postMessage({ type: 'progress', progress: i / total })
+      }
+      const off = new OffscreenCanvas(320, 180)
+      const ctx = off.getContext('2d')
+      const stream = off.captureStream(30)
+      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' })
+      let chunks = []
+      recorder.ondataavailable = (e) => chunks.push(e.data)
+      const done = new Promise(res => recorder.onstop = res)
+      recorder.start()
+      const frames = Math.max(60, total)
+      for (let i=0;i<frames;i++) {
+        ctx.fillStyle = 'hsl(' + ((i/frames)*360) + ',80%,50%)'
+        ctx.fillRect(0,0,320,180)
+        ctx.fillStyle = 'white'
+        ctx.font = '16px sans-serif'
+        ctx.fillText('Rendering preset: ' + payload.preset + ' | Frame ' + (i+1), 10, 30)
+        await new Promise(r => setTimeout(r, 16))
+      }
+      recorder.stop()
+      await done
+      const blob = new Blob(chunks, { type: 'video/webm' })
+      const url = URL.createObjectURL(blob)
+      self.postMessage({ type: 'done', url })
+    }
+  }
+  `
 }
 
 export default App
