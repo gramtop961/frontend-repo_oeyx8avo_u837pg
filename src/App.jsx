@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import Viewer from './components/Viewer'
 import Controls from './components/Controls'
@@ -10,30 +10,67 @@ function App() {
   const [progress, setProgress] = useState(0)
   const [rendering, setRendering] = useState(false)
   const [videoUrl, setVideoUrl] = useState(null)
-  const workerRef = useRef(null)
+  const viewerRef = useRef(null)
 
-  useEffect(() => {
-    // Lazy create worker
-    const code = document.querySelector('script[data-worker]')?.textContent
-    if (!workerRef.current && code) {
-      const blob = new Blob([code], { type: 'text/javascript' })
-      const url = URL.createObjectURL(blob)
-      workerRef.current = new Worker(url)
-      workerRef.current.onmessage = (e) => {
-        if (e.data?.type === 'progress') setProgress(e.data.progress)
-        if (e.data?.type === 'done') {
-          setRendering(false)
-          setVideoUrl(e.data.url)
-        }
-      }
+  const handleRender = async ({ resolution, duration }) => {
+    // Map resolution height to 16:9 width/height
+    const h = parseInt(resolution, 10) || 1080
+    const w = Math.round(h * (16 / 9))
+    const fps = 30
+    const totalMs = (parseFloat(duration) || 3) * 1000
+
+    const viewerApi = viewerRef.current
+    if (!viewerApi) return
+
+    // Prepare canvas and recorder
+    viewerApi.setRenderResolution(w, h)
+    const canvas = viewerApi.getCanvas()
+    if (!canvas) return
+
+    const stream = canvas.captureStream(fps)
+    let mimeType = 'video/webm;codecs=vp9'
+    if (!MediaRecorder.isTypeSupported(mimeType)) {
+      mimeType = 'video/webm;codecs=vp8'
     }
-  }, [])
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 6_000_000 })
+    const chunks = []
+    recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data) }
 
-  const handleRender = ({ resolution, duration }) => {
     setRendering(true)
     setProgress(0)
     setVideoUrl(null)
-    workerRef.current?.postMessage({ cmd: 'render', payload: { resolution, duration, preset } })
+
+    const done = new Promise((resolve) => {
+      recorder.onstop = resolve
+    })
+
+    recorder.start(Math.round(1000 / fps))
+
+    // Drive progress for the requested duration while Viewer renders normally
+    const start = performance.now()
+    const tick = () => {
+      const now = performance.now()
+      const elapsed = now - start
+      const p = Math.min(1, elapsed / totalMs)
+      setProgress(p)
+      if (p < 1) {
+        requestAnimationFrame(tick)
+      } else {
+        recorder.stop()
+      }
+    }
+    requestAnimationFrame(tick)
+
+    await done
+
+    const blob = new Blob(chunks, { type: 'video/webm' })
+    const url = URL.createObjectURL(blob)
+
+    setRendering(false)
+    setVideoUrl(url)
+
+    // Restore canvas resolution to UI size
+    viewerApi.clearRenderResolution()
   }
 
   return (
@@ -41,14 +78,14 @@ function App() {
       <header className="h-14 border-b border-white/10 flex items-center px-4 gap-3">
         <div className="w-2 h-2 rounded-full bg-emerald-500" />
         <div className="font-semibold">PromoGen MVP</div>
-        <div className="opacity-60 text-sm">Client-side 3D preview + mock render</div>
+        <div className="opacity-60 text-sm">Client-side 3D preview + real capture</div>
       </header>
       <div className="flex-1 grid grid-rows-[1fr_auto] md:grid-rows-1 md:grid-cols-[auto_1fr_auto]">
         <Sidebar selectedPreset={preset} onSelectPreset={setPreset} />
 
         <main className="relative bg-slate-900/30">
           <div className="absolute inset-0">
-            <Viewer media={media} preset={preset} deviceColor={deviceColor} />
+            <Viewer ref={viewerRef} media={media} preset={preset} deviceColor={deviceColor} />
           </div>
           <div className="absolute left-1/2 -translate-x-1/2 bottom-4 w-[min(640px,90%)]">
             <div className="bg-slate-900/70 backdrop-blur border border-white/10 rounded-lg p-3">
@@ -79,52 +116,8 @@ function App() {
           setPreset={setPreset}
         />
       </div>
-
-      {/* Inline worker source for simplicity in this environment */}
-      <script type="text/worker" data-worker>
-        {`
-          ${inlineWorker()}
-        `}
-      </script>
     </div>
   )
-}
-
-function inlineWorker() {
-  return `
-  self.onmessage = async (e) => {
-    const { cmd, payload } = e.data || {}
-    if (cmd === 'render') {
-      const total = (payload.duration || 3) * 30
-      for (let i = 0; i <= total; i++) {
-        await new Promise(r => setTimeout(r, 10))
-        self.postMessage({ type: 'progress', progress: i / total })
-      }
-      const off = new OffscreenCanvas(320, 180)
-      const ctx = off.getContext('2d')
-      const stream = off.captureStream(30)
-      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' })
-      let chunks = []
-      recorder.ondataavailable = (e) => chunks.push(e.data)
-      const done = new Promise(res => recorder.onstop = res)
-      recorder.start()
-      const frames = Math.max(60, total)
-      for (let i=0;i<frames;i++) {
-        ctx.fillStyle = 'hsl(' + ((i/frames)*360) + ',80%,50%)'
-        ctx.fillRect(0,0,320,180)
-        ctx.fillStyle = 'white'
-        ctx.font = '16px sans-serif'
-        ctx.fillText('Rendering preset: ' + payload.preset + ' | Frame ' + (i+1), 10, 30)
-        await new Promise(r => setTimeout(r, 16))
-      }
-      recorder.stop()
-      await done
-      const blob = new Blob(chunks, { type: 'video/webm' })
-      const url = URL.createObjectURL(blob)
-      self.postMessage({ type: 'done', url })
-    }
-  }
-  `
 }
 
 export default App

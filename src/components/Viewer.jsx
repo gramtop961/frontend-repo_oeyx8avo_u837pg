@@ -1,29 +1,42 @@
-import { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react'
 import * as THREE from 'three'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'
 
-export default function Viewer({ media, preset, deviceColor }) {
+const Viewer = forwardRef(function Viewer({ media, preset, deviceColor }, ref) {
   const canvasRef = useRef(null)
   const cleanupRef = useRef(null)
+  const rendererRef = useRef(null)
+  const cameraRef = useRef(null)
+  const sceneRef = useRef(null)
+  const phoneGroupRef = useRef(null)
+  const screenRef = useRef(null)
+  const screenTextureRef = useRef(null)
+  const overrideSizeRef = useRef(null) // {w,h} when recording
 
   useEffect(() => {
     const canvas = canvasRef.current
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true })
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.setSize(canvas.clientWidth, canvas.clientHeight, false)
+    // Initial size based on client box
+    const initialW = canvas.clientWidth || 800
+    const initialH = canvas.clientHeight || 600
+    renderer.setSize(initialW, initialH, false)
     renderer.outputEncoding = THREE.sRGBEncoding
     renderer.toneMapping = THREE.ACESFilmicToneMapping
 
-    const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(35, canvas.clientWidth / canvas.clientHeight, 0.1, 100)
-    camera.position.set(2.2, 1.2, 2.6)
+    rendererRef.current = renderer
 
-    const controls = { t: 0 }
+    const scene = new THREE.Scene()
+    sceneRef.current = scene
+
+    const camera = new THREE.PerspectiveCamera(35, initialW / initialH, 0.1, 100)
+    camera.position.set(2.2, 1.2, 2.6)
+    cameraRef.current = camera
 
     const resize = () => {
-      const w = canvas.clientWidth
-      const h = canvas.clientHeight
+      const w = overrideSizeRef.current?.w ?? canvas.clientWidth
+      const h = overrideSizeRef.current?.h ?? canvas.clientHeight
+      if (!w || !h) return
       renderer.setSize(w, h, false)
       camera.aspect = w / h
       camera.updateProjectionMatrix()
@@ -49,6 +62,7 @@ export default function Viewer({ media, preset, deviceColor }) {
 
     // Placeholder phone if GLB missing
     const phoneGroup = new THREE.Group()
+    phoneGroupRef.current = phoneGroup
     const body = new THREE.Mesh(
       new THREE.BoxGeometry(0.7, 1.45, 0.06),
       new THREE.MeshStandardMaterial({ color: deviceColor || '#111827', metalness: 0.7, roughness: 0.35 })
@@ -60,24 +74,23 @@ export default function Viewer({ media, preset, deviceColor }) {
     )
     screen.position.z = 0.031
     phoneGroup.add(screen)
+    screenRef.current = screen
 
     // If media is image, map as texture
-    let screenTexture = null
-    if (media && media.type.startsWith('image/')) {
+    if (media && media.type?.startsWith('image/')) {
       const tex = new THREE.TextureLoader().load(media.url)
       tex.colorSpace = THREE.SRGBColorSpace
       screen.material.map = tex
       screen.material.emissiveMap = tex
       screen.material.emissive = new THREE.Color(0xffffff)
       screen.material.needsUpdate = true
-      screenTexture = tex
+      screenTextureRef.current = tex
     }
 
     scene.add(phoneGroup)
 
-    // Animation presets
-    const animatePreset = (time) => {
-      const t = (time * 0.001) % 6
+    const clock = new THREE.Clock()
+    const animatePreset = (t) => {
       if (preset === 'dolly') {
         camera.position.set(1.5 + Math.sin(t) * 0.8, 1.1, 2.2 + Math.cos(t) * 0.5)
         camera.lookAt(0, 0.2, 0)
@@ -92,7 +105,6 @@ export default function Viewer({ media, preset, deviceColor }) {
       }
     }
 
-    const clock = new THREE.Clock()
     const renderLoop = () => {
       const elapsed = clock.getElapsedTime()
       animatePreset(elapsed)
@@ -105,13 +117,75 @@ export default function Viewer({ media, preset, deviceColor }) {
       window.removeEventListener('resize', resize)
       if (cleanupRef.current) cancelAnimationFrame(cleanupRef.current)
       renderer.dispose()
-      if (screenTexture) screenTexture.dispose()
+      if (screenTextureRef.current) screenTextureRef.current.dispose()
     }
-  }, [preset, deviceColor, media])
+  }, [])
+
+  // Respond to prop changes:
+  useEffect(() => {
+    // Update body color
+    if (phoneGroupRef.current) {
+      const body = phoneGroupRef.current.children[0]
+      if (body && body.material) body.material.color = new THREE.Color(deviceColor || '#111827')
+    }
+  }, [deviceColor])
+
+  useEffect(() => {
+    // Update media texture
+    const screen = screenRef.current
+    if (!screen) return
+    if (screenTextureRef.current) {
+      screenTextureRef.current.dispose()
+      screenTextureRef.current = null
+    }
+    if (media && media.type?.startsWith('image/')) {
+      const tex = new THREE.TextureLoader().load(media.url)
+      tex.colorSpace = THREE.SRGBColorSpace
+      screen.material.map = tex
+      screen.material.emissiveMap = tex
+      screen.material.emissive = new THREE.Color(0xffffff)
+      screen.material.needsUpdate = true
+      screenTextureRef.current = tex
+    } else {
+      screen.material.map = null
+      screen.material.emissiveMap = null
+      screen.material.emissive = new THREE.Color(0x000000)
+      screen.material.needsUpdate = true
+    }
+  }, [media])
+
+  useImperativeHandle(ref, () => ({
+    getCanvas: () => canvasRef.current,
+    setRenderResolution: (w, h) => {
+      overrideSizeRef.current = { w, h }
+      const r = rendererRef.current
+      const c = cameraRef.current
+      if (!r || !c) return
+      r.setSize(w, h, false)
+      c.aspect = w / h
+      c.updateProjectionMatrix()
+    },
+    clearRenderResolution: () => {
+      overrideSizeRef.current = null
+      // Trigger a resize to client size
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const r = rendererRef.current
+      const c = cameraRef.current
+      const w = canvas.clientWidth
+      const h = canvas.clientHeight
+      if (!r || !c || !w || !h) return
+      r.setSize(w, h, false)
+      c.aspect = w / h
+      c.updateProjectionMatrix()
+    },
+  }), [])
 
   return (
     <div className="w-full h-full">
       <canvas ref={canvasRef} className="w-full h-full" />
     </div>
   )
-}
+})
+
+export default Viewer
