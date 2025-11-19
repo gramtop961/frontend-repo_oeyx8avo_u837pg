@@ -3,46 +3,7 @@
 > vite
 
 
-  VITE v5.4.20  ready in 281 ms
+  VITE v5.4.20  ready in 296 ms
 
   ➜  Local:   http://localhost:3000/
   ➜  Network: http://172.20.31.8:3000/
-11:50:02 PM [vite] Pre-transform error: Failed to resolve import "three" from "src/components/Viewer.jsx". Does the file exist?
-11:50:07 PM [vite] Internal server error: Failed to resolve import "three" from "src/components/Viewer.jsx". Does the file exist?
-  Plugin: vite:import-analysis
-  File: /home/workspace/src/components/Viewer.jsx:2:23
-  1  |  import { jsxDEV } from "react/jsx-dev-runtime";
-  2  |  import { useEffect, useRef } from "react";
-  3  |  import * as THREE from "three";
-     |                          ^
-  4  |  import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-  5  |  import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
-      at TransformPluginContext._formatError (file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:49258:41)
-      at TransformPluginContext.error (file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:49253:16)
-      at normalizeUrl (file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:64306:23)
-      at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-      at async file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:64438:39
-      at async Promise.all (index 2)
-      at async TransformPluginContext.transform (file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:64365:7)
-      at async PluginContainer.transform (file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:49099:18)
-      at async loadAndTransform (file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:51977:27)
-      at async viteTransformMiddleware (file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:62105:24)
-11:50:14 PM [vite] Internal server error: Failed to resolve import "three" from "src/components/Viewer.jsx". Does the file exist?
-  Plugin: vite:import-analysis
-  File: /home/workspace/src/components/Viewer.jsx:2:23
-  1  |  import { jsxDEV } from "react/jsx-dev-runtime";
-  2  |  import { useEffect, useRef } from "react";
-  3  |  import * as THREE from "three";
-     |                          ^
-  4  |  import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-  5  |  import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
-      at TransformPluginContext._formatError (file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:49258:41)
-      at TransformPluginContext.error (file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:49253:16)
-      at normalizeUrl (file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:64306:23)
-      at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-      at async file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:64438:39
-      at async Promise.all (index 2)
-      at async TransformPluginContext.transform (file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:64365:7)
-      at async PluginContainer.transform (file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:49099:18)
-      at async loadAndTransform (file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:51977:27)
-      at async viteTransformMiddleware (file:///home/workspace/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:62105:24)
